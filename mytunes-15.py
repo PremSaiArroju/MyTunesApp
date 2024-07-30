@@ -2,15 +2,15 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, Menu
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pygame
-from mutagen.easyid3 import EasyID3 
-import mysql.connector 
+from mutagen.easyid3 import EasyID3
+import mysql.connector
 import os
 from tkinter import ttk
 
 # Initialize Pygame mixer
 pygame.mixer.init()
 
-# Establish MySQL database connection
+# Database connection
 def create_connection():
     return mysql.connector.connect(
         host="localhost",
@@ -163,7 +163,7 @@ class MyTunesApp:
             pygame.mixer.music.play()
             self.paused = False
         connection.close()
-        
+
     def stop_song(self):
         pygame.mixer.music.stop()
         self.paused = False
@@ -190,7 +190,7 @@ class MyTunesApp:
             self.song_treeview.selection_set(self.song_treeview.get_children()[self.current_song_index])
             self.play_song()
 
-    def add_song(self):
+    def add_song(self, filepath=None):
         if not filepath:
             filepath = filedialog.askopenfilename(filetypes=[("MP3 files", "*.mp3")])
         
