@@ -219,32 +219,6 @@ class MyTunesApp:
             
             connection.close()
             self.populate_song_list()
-        
-        if filepath:
-            audio = EasyID3(filepath)
-            title = audio.get("title", ["Unknown Title"])[0]
-            artist = audio.get("artist", ["Unknown Artist"])[0]
-            album = audio.get("album", ["Unknown Album"])[0]
-            year = audio.get("date", ["Unknown Year"])[0]
-            genre = audio.get("genre", ["Unknown Genre"])[0]
-            comment = audio.get("comment", [""])[0]
-
-            connection = create_connection()
-            cursor = connection.cursor()
-            cursor.execute("SELECT * FROM songs WHERE title = %s AND artist = %s AND album = %s",
-                           (title, artist, album))
-            existing_song = cursor.fetchone()
-            
-            if existing_song:
-                messagebox.showwarning("Warning", "This song is already in the library.")
-            else:
-                cursor.execute("INSERT INTO songs (title, artist, album, year, genre, comment, filepath) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                               (title, artist, album, year, genre, comment, filepath))
-                connection.commit()
-                messagebox.showinfo("Info", "Song added successfully")
-            
-            connection.close()
-            self.populate_song_list()
 
     def delete_song(self):
         if self.current_song_index is None:
