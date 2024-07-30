@@ -14,8 +14,8 @@ pygame.mixer.init()
 def create_connection():
     return mysql.connector.connect(
         host="localhost",
-        user="root",
-        password="prem1200",
+        user="root", #update your username
+        password="prem1200", #use your mysql password
         database="mytunes"
     )
 

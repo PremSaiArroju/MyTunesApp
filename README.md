@@ -25,10 +25,14 @@ To run this project, you need to have the following installed:
 - tkinterdnd2
 - MySQL Server
 
-## You can install the required Python packages using:
+## You can install the required Python packages using
 
 pip install -r requirements.txt
 
-## Run the code by using:
+## Execution
 
-python mytunes.py
+Execute the mysql in your workbench and run python file using terminal or IDE in folder path $python mytunes.py
+
+## Note
+
+Change the mysql username and password in your python file after downloading.
