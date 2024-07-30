@@ -2,15 +2,15 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, Menu
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pygame
-from mutagen.easyid3 import EasyID3 
-import mysql.connector 
+from mutagen.easyid3 import EasyID3
+import mysql.connector
 import os
 from tkinter import ttk
 
 # Initialize Pygame mixer
 pygame.mixer.init()
 
-# Establish MySQL database connection
+# Database connection
 def create_connection():
     return mysql.connector.connect(
         host="localhost",
@@ -28,8 +28,6 @@ class MyTunesApp:
         
         self.current_song_index = None
         self.paused = False
-        self.editing_comment = False
-        self.comment_entry = None
 
         self.create_widgets()
         self.populate_song_list()
@@ -72,7 +70,6 @@ class MyTunesApp:
         
         self.song_treeview.pack(fill=tk.BOTH, expand=True)
         self.song_treeview.bind('<<TreeviewSelect>>', self.on_song_select)
-        self.song_treeview.bind('<Double-1>', self.on_double_click)
 
         # Enable drag and drop
         self.root.drop_target_register(DND_FILES)
@@ -163,7 +160,7 @@ class MyTunesApp:
             pygame.mixer.music.play()
             self.paused = False
         connection.close()
-        
+
     def stop_song(self):
         pygame.mixer.music.stop()
         self.paused = False
@@ -193,32 +190,6 @@ class MyTunesApp:
     def add_song(self, filepath=None):
         if not filepath:
             filepath = filedialog.askopenfilename(filetypes=[("MP3 files", "*.mp3")])
-        
-        if filepath:
-            audio = EasyID3(filepath)
-            title = audio.get("title", ["Unknown Title"])[0]
-            artist = audio.get("artist", ["Unknown Artist"])[0]
-            album = audio.get("album", ["Unknown Album"])[0]
-            year = audio.get("date", ["Unknown Year"])[0]
-            genre = audio.get("genre", ["Unknown Genre"])[0]
-            comment = audio.get("comment", [""])[0]
-
-            connection = create_connection()
-            cursor = connection.cursor()
-            cursor.execute("SELECT * FROM songs WHERE title = %s AND artist = %s AND album = %s",
-                           (title, artist, album))
-            existing_song = cursor.fetchone()
-            
-            if existing_song:
-                messagebox.showwarning("Warning", "This song is already in the library.")
-            else:
-                cursor.execute("INSERT INTO songs (title, artist, album, year, genre, comment, filepath) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                               (title, artist, album, year, genre, comment, filepath))
-                connection.commit()
-                messagebox.showinfo("Info", "Song added successfully")
-            
-            connection.close()
-            self.populate_song_list()
         
         if filepath:
             audio = EasyID3(filepath)
@@ -279,50 +250,6 @@ class MyTunesApp:
         for file in files:
             if file.endswith(".mp3"):
                 self.add_song(file)
-
-    def on_double_click(self, event):
-        item = self.song_treeview.selection()
-        if not item:
-            return
-        
-        column = self.song_treeview.identify_column(event.x)
-        row = self.song_treeview.identify_row(event.y)
-        if column == '#6':  # Comment column
-            item_values = self.song_treeview.item(item, "values")
-            comment = item_values[5] if len(item_values) > 5 else ""
-            
-            if not self.editing_comment:
-                self.editing_comment = True
-                x, y, width, height = self.song_treeview.bbox(item, column)
-                self.comment_entry = tk.Entry(self.song_treeview)
-                self.comment_entry.place(x=x, y=y, width=width, height=height)
-                self.comment_entry.insert(0, comment)
-                self.comment_entry.bind("<Return>", lambda e: self.save_comment(item))
-                self.comment_entry.bind("<FocusOut>", lambda e: self.save_comment(item))
-                self.comment_entry.focus()
-
-    def save_comment(self, item):
-        new_comment = self.comment_entry.get()
-        song_id = self.songs[self.current_song_index][0]
-
-        connection = create_connection()
-        cursor = connection.cursor()
-        cursor.execute("UPDATE songs SET comment = %s WHERE id = %s", (new_comment, song_id))
-        connection.commit()
-        connection.close()
-
-        self.song_treeview.item(item, values=(
-            self.song_treeview.set(item, 'Title'),
-            self.song_treeview.set(item, 'Artist'),
-            self.song_treeview.set(item, 'Album'),
-            self.song_treeview.set(item, 'Year'),
-            self.song_treeview.set(item, 'Genre'),
-            new_comment
-        ))
-
-        self.comment_entry.destroy()
-        self.comment_entry = None
-        self.editing_comment = False
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
