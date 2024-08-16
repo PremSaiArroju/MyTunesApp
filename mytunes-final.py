@@ -25,6 +25,7 @@ def create_connection():
 
 class MyTunesApp(QMainWindow):
     opened_windows = []  # Class variable to hold references to opened windows
+    currently_playing_window = None  # Class variable to track the currently playing window
 
     def __init__(self, playlist_id=None, parent=None):
         super().__init__(parent)
@@ -38,6 +39,7 @@ class MyTunesApp(QMainWindow):
         self.shuffle = False
         self.repeat = False
         self.song_length = 0  # Initialize song_length
+        self.updating_selection = False  # Flag to prevent re-entrant signals
 
         self.load_configuration()
         self.init_ui()
@@ -45,7 +47,13 @@ class MyTunesApp(QMainWindow):
         self.update_timers_and_progress()
         self.load_playlists()  # Load playlists
 
+        self.song_treeview.setDragEnabled(True)
+        self.song_treeview.setDragDropMode(QTreeWidget.InternalMove)
+        self.song_treeview.startDrag = self.start_drag
+        self.song_treeview.dropEvent = self.dropEvent
+
         print(f"Initialized MyTunesApp with playlist ID: {playlist_id}")  # Debugging
+
 
     def load_configuration(self):
         try:
@@ -171,6 +179,7 @@ class MyTunesApp(QMainWindow):
         self.btn_add.clicked.connect(self.add_song)
         self.btn_delete.clicked.connect(self.delete_song)
 
+
         # Menu bar
         self.menu = self.menuBar()
 
@@ -254,9 +263,18 @@ class MyTunesApp(QMainWindow):
         connection.close()
 
     def on_song_select(self):
+        if self.updating_selection:
+            return  # Ignore selection changes if we're updating the selection manually
+
         selection = self.song_treeview.selectedItems()
         if selection:
             self.current_song_index = self.song_treeview.indexOfTopLevelItem(selection[0])
+            print(f"Manual selection: index {self.current_song_index}")  # Debugging
+            
+            # Optionally, start playing the selected song automatically
+            # self.play_song()
+
+
 
     def on_library_item_clicked(self, item, column):
         if item.text(0) == "Library":
@@ -269,38 +287,41 @@ class MyTunesApp(QMainWindow):
 
     def play_song(self):
         try:
-            if self.current_song_index is not None:
-                if self.shuffle:
-                    self.current_song_index = random.randint(0, len(self.songs) - 1)
+            if self.current_song_index is None:
+                return
 
-                song_id = self.songs[self.current_song_index][0]
+            song_id = self.songs[self.current_song_index][0]
 
-                connection = create_connection()
-                cursor = connection.cursor()
-                cursor.execute("SELECT filepath FROM songs WHERE id = %s", (song_id,))
-                result = cursor.fetchone()
-                connection.close()
+            connection = create_connection()
+            cursor = connection.cursor()
+            cursor.execute("SELECT filepath FROM songs WHERE id = %s", (song_id,))
+            result = cursor.fetchone()
+            connection.close()
 
-                if result:
-                    song_path = result[0]
-                    pygame.mixer.music.load(song_path)
-                    pygame.mixer.music.play()
-                    self.paused = False
-                    self.song_length = pygame.mixer.Sound(song_path).get_length()
-                    self.start_time = pygame.time.get_ticks()
+            if result:
+                song_path = result[0]
+                pygame.mixer.music.load(song_path)
+                pygame.mixer.music.play()
+                self.paused = False
+                self.song_length = pygame.mixer.Sound(song_path).get_length()
+                self.start_time = pygame.time.get_ticks()
 
-                    if not self.shuffle:
-                        if len(self.recent_play) == 10:
-                            self.recent_play.pop(0)
-                        self.recent_play.append(self.songs[self.current_song_index])
-                        self.save_configuration()
+                # Update the currently playing window
+                MyTunesApp.currently_playing_window = self
 
-                    self.update_timers_and_progress()
-                    print(f"Playing song ID: {song_id} from playlist: {self.current_playlist}")  # Debugging
+                # Add to recent play if not shuffling
+                if not self.shuffle:
+                    if len(self.recent_play) == 10:
+                        self.recent_play.pop(0)
+                    self.recent_play.append(self.songs[self.current_song_index])
+                    self.save_configuration()
 
+                self.update_timers_and_progress()
+
+            else:
+                QMessageBox.critical(self, "Error", "Failed to load song.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred during playback: {e}")
-            print(f"Error during playback: {e}")  # Debugging
 
     def stop_song(self):
         pygame.mixer.music.stop()
@@ -318,16 +339,42 @@ class MyTunesApp(QMainWindow):
             self.paused = False
 
     def next_song(self):
-        if self.current_song_index is not None:
+        if not self.songs or self.current_song_index is None:
+            return  # No songs in the playlist or no song selected
+
+        if self.shuffle:
+            self.current_song_index = random.randint(0, len(self.songs) - 1)
+        else:
             self.current_song_index = (self.current_song_index + 1) % len(self.songs)
-            self.song_treeview.setCurrentItem(self.song_treeview.topLevelItem(self.current_song_index))
-            self.play_song()
+
+        # Update the UI to reflect the current song selection
+        self.updating_selection = True
+        self.song_treeview.setCurrentItem(self.song_treeview.topLevelItem(self.current_song_index))
+        self.updating_selection = False
+
+        # Trigger the play function to start playing the next song
+        self.play_song()
 
     def prev_song(self):
-        if self.current_song_index is not None:
+        if not self.songs or self.current_song_index is None:
+            return  # No songs in the playlist or no song selected
+
+        if self.shuffle:
+            self.current_song_index = random.randint(0, len(self.songs) - 1)
+        else:
             self.current_song_index = (self.current_song_index - 1) % len(self.songs)
-            self.song_treeview.setCurrentItem(self.song_treeview.topLevelItem(self.current_song_index))
-            self.play_song()
+        
+        # Handle negative index to wrap around
+        if self.current_song_index < 0:
+            self.current_song_index = len(self.songs) - 1
+
+        # Update the UI to reflect the current song selection
+        self.updating_selection = True
+        self.song_treeview.setCurrentItem(self.song_treeview.topLevelItem(self.current_song_index))
+        self.updating_selection = False
+        
+        # Trigger the play function to start playing the previous song
+        self.play_song()
 
     def add_song(self, filepath=None):
         if not filepath:
@@ -479,14 +526,30 @@ class MyTunesApp(QMainWindow):
         if selected_item:
             menu = QMenu(self)
 
+            add_song_action = menu.addAction("Add Song")
+            add_song_action.triggered.connect(self.add_song)
+
             add_to_playlist_menu = menu.addMenu("Add to Playlist")
             playlists = self.load_playlists()  # Correct method name
-            for playlist in playlists:
-                action = add_to_playlist_menu.addAction(playlist[1])
-                action.triggered.connect(lambda checked, p=playlist[0]: self.add_song_to_selected_playlist(self.songs[self.current_song_index][0], p))
+            
+            # Ensure that a song is selected before adding to playlist
+            if self.current_song_index is not None:
+                for playlist in playlists:
+                    action = add_to_playlist_menu.addAction(playlist[1])
+                    action.triggered.connect(lambda checked, p=playlist[0]: self.add_song_to_selected_playlist(self.songs[self.current_song_index][0], p))
 
             menu.addAction("Delete Song", self.delete_song)
             menu.exec_(self.song_treeview.mapToGlobal(pos))
+
+    def show_playlist_context_menu(self, pos):
+        selected_item = self.library_tree.itemAt(pos)
+        if selected_item and selected_item.data(0, Qt.UserRole):
+            menu = QMenu(self)
+            open_action = menu.addAction("Open in New Window")
+            open_action.triggered.connect(self.open_playlist_in_new_window)
+            delete_action = menu.addAction("Delete Playlist")
+            delete_action.triggered.connect(self.delete_playlist)
+            menu.exec_(self.library_tree.mapToGlobal(pos))
 
     def add_song_to_selected_playlist(self, song_id, playlist_id):
         try:
@@ -506,13 +569,16 @@ class MyTunesApp(QMainWindow):
             connection.close()
 
     def load_playlists(self):
+        # Clear existing playlist items before loading new ones
+        playlist_item = self.library_tree.findItems("Playlists", Qt.MatchExactly)[0]
+        playlist_item.takeChildren()
+
         connection = create_connection()
         cursor = connection.cursor()
         cursor.execute("SELECT id, name FROM playlists")
         playlists = cursor.fetchall()
         connection.close()
 
-        playlist_item = self.library_tree.findItems("Playlists", Qt.MatchExactly)[0]
         for playlist in playlists:
             item = QTreeWidgetItem(playlist_item)
             item.setText(0, playlist[1])
@@ -554,14 +620,6 @@ class MyTunesApp(QMainWindow):
             self.populate_song_list()
             QMessageBox.information(self, "Info", "Playlist deleted successfully")
 
-    def show_playlist_context_menu(self, pos):
-        selected_item = self.library_tree.itemAt(pos)
-        if selected_item and selected_item.data(0, Qt.UserRole):
-            menu = QMenu(self)
-            menu.addAction("Open in New Window", self.open_playlist_in_new_window)
-            menu.addAction("Delete Playlist", self.delete_playlist)
-            menu.exec_(self.library_tree.mapToGlobal(pos))
-
     def open_playlist_in_new_window(self):
         try:
             selected_item = self.library_tree.currentItem()
@@ -579,18 +637,27 @@ class MyTunesApp(QMainWindow):
             print(f"Error opening new window: {e}")  # Debugging
 
     def start_drag(self, supported_actions):
-        drag = QDrag(self)
-        mime_data = QMimeData()
-
+        # Get the selected items
         selected_items = self.song_treeview.selectedItems()
         if not selected_items:
             return
 
-        # Serialize the song ID(s) of the selected item(s) to the drag data
+        # Create a QDrag object for the drag operation
+        drag = QDrag(self.song_treeview)
+        mime_data = QMimeData()
+
+        # Collect the song IDs of all selected items
         song_ids = [item.data(0, Qt.UserRole) for item in selected_items]
+
+        # Serialize the list of song IDs and set it in the MIME data
         mime_data.setData("application/x-song-ids", QByteArray(str(song_ids).encode('utf-8')))
+        
+        # Attach the MIME data to the drag object
         drag.setMimeData(mime_data)
+        
+        # Execute the drag operation
         drag.exec_(supported_actions)
+
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls() or event.mimeData().hasFormat("application/x-song-ids"):
@@ -606,12 +673,13 @@ class MyTunesApp(QMainWindow):
                     # Ensure the song is in the library
                     song_id = self.add_song_to_library(filepath)
                     
-                    # Add the song to the playlist (allowing multiple entries)
+                    # Add the song to the playlist
                     if song_id and self.current_playlist:
                         self.add_song_to_selected_playlist(song_id, self.current_playlist)
             self.populate_song_list(self.current_playlist)
             event.acceptProposedAction()
         elif event.mimeData().hasFormat("application/x-song-ids"):
+            # Deserialize the song IDs
             song_ids = eval(event.mimeData().data("application/x-song-ids").data().decode('utf-8'))
             for song_id in song_ids:
                 if self.current_playlist:
@@ -623,6 +691,11 @@ class MyTunesApp(QMainWindow):
 
     def closeEvent(self, event):
         print(f"Closing window with playlist ID: {self.current_playlist}")  # Debugging
+        
+        if MyTunesApp.currently_playing_window == self:
+            pygame.mixer.music.stop()  # Stop the music
+            MyTunesApp.currently_playing_window = None  # Clear the currently playing window
+        
         super().closeEvent(event)
 
 if __name__ == "__main__":
