@@ -1,8 +1,8 @@
 # MyTunes - A Music Player
 
-MyTunes is a music player application built with Tkinter, Pygame, and MySQL. 
+MyTunes is a music player application built with PyQt5, Pygame, and MySQL.
 
-It allows users to add, play, pause, stop, and delete songs from a library, with support for drag-and-drop functionality and metadata management using ID3 Tags by mutagen.
+It allows users to add, play, pause, stop, and delete songs from a library, with support for drag-and-drop functionality and metadata management using ID3 Tags via mutagen.
 
 ## Features
 
@@ -12,17 +12,25 @@ It allows users to add, play, pause, stop, and delete songs from a library, with
 - **Drag-and-Drop**: Easily add songs by dragging and dropping MP3 files.
 - **Metadata Display**: Shows song metadata including Title, Artist, Album, Year, Genre, and Comments.
 - **Comment Editing**: Inline editing of song comments.
+- **Playlist Management**: Create, delete, and manage multiple playlists.
 
 ## Requirements
 
 To run this project, you need to have the following installed:
 
-- Python 3.x
-- Tkinter
+- Python 3.18
+- PyQt5
 - Pygame
 - Mutagen
 - MySQL Connector
-- tkinterdnd2
+- MySQL Server
+
+## Installation
+
+You can install the required Python packages using:
+
+pip install -r requirements.txt
+
 - MySQL Server
 
 ## You can install the required Python packages using
